@@ -1,0 +1,8 @@
+{
+  "name": "VoltLogic Pro",
+  "description": "Professional-grade industrial Ladder Logic designer and real-time simulator for educational and engineering workflows.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
