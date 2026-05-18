@@ -47,8 +47,9 @@ export function Toolbar({
             <button onClick={() => onAddNode('contact-no')} className="px-4 py-2 hover:bg-black/5 rounded-xl transition-all active:scale-95 border border-transparent hover:border-black/5 font-mono text-[11px] font-bold text-zinc-600" title="Examine if Closed (XIC)">--[ ]--</button>
             <button onClick={() => onAddNode('contact-nc')} className="px-4 py-2 hover:bg-black/5 rounded-xl transition-all active:scale-95 border border-transparent hover:border-black/5 font-mono text-[11px] font-bold text-zinc-600" title="Examine if Open (XIO)">--[/]--</button>
             <button onClick={() => onAddNode('coil')} className="px-4 py-2 hover:bg-black/5 rounded-xl transition-all active:scale-95 border border-transparent hover:border-black/5 font-mono text-[11px] font-bold text-zinc-600" title="Output Energize (OTE)">--( )--</button>
+            <button onClick={() => onAddNode('branch-start')} className="px-4 py-2 hover:bg-black/5 rounded-xl transition-all active:scale-95 border border-transparent hover:border-black/5 font-mono text-[11px] font-bold text-zinc-600" title="Branch Start (BST)">--+--</button>
+            <button onClick={() => onAddNode('wire' as any)} className="px-4 py-2 hover:bg-black/5 rounded-xl transition-all active:scale-95 border border-transparent hover:border-black/5 font-mono text-[11px] font-bold text-blue-600" title="Manual Wire Tool">WIRE</button>
             <button onClick={() => onAddNode('timer-on')} className="px-4 py-2 hover:bg-black/5 rounded-xl transition-all active:scale-95 border border-transparent hover:border-black/5 font-mono text-[11px] font-bold text-zinc-600" title="Timer On Delay (TON)">TON</button>
-            <button onClick={() => onAddNode('counter-up')} className="px-4 py-2 hover:bg-black/5 rounded-xl transition-all active:scale-95 border border-transparent hover:border-black/5 font-mono text-[11px] font-bold text-zinc-600" title="Count Up (CTU)">CTU</button>
           </>
         );
 
@@ -61,6 +62,7 @@ export function Toolbar({
             <button onClick={() => onAddNode('coil-latch')} className="px-4 py-2 hover:bg-black/5 rounded-xl transition-all active:scale-95 border border-transparent hover:border-black/5 font-mono text-[11px] font-bold text-zinc-600" title="Output Latch (OTL)">--(L)--</button>
             <button onClick={() => onAddNode('coil-unlatch')} className="px-4 py-2 hover:bg-black/5 rounded-xl transition-all active:scale-95 border border-transparent hover:border-black/5 font-mono text-[11px] font-bold text-zinc-600" title="Output Unlatch (OTU)">--(U)--</button>
             <button onClick={() => onAddNode('one-shot')} className="px-4 py-2 hover:bg-black/5 rounded-xl transition-all active:scale-95 border border-transparent hover:border-black/5 font-mono text-[11px] font-bold text-zinc-600" title="One Shot (ONS)">[ONS]</button>
+            <button onClick={() => onAddNode('branch-start')} className="px-4 py-2 hover:bg-black/5 rounded-xl transition-all active:scale-95 border border-transparent hover:border-black/5 font-mono text-[11px] font-bold text-zinc-600" title="Branch Start (BST)">--+--</button>
           </>
         );
 

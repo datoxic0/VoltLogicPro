@@ -1,4 +1,4 @@
-import { LadderNode, LadderState } from './types';
+import { LadderNode, LadderState, LEFT_RAIL_X, GRID_SIZE } from './types';
 
 /**
  * Simplified Ladder Logic Solver
@@ -18,6 +18,46 @@ export function solveCircuit(state: LadderState): Record<string, boolean | numbe
     const rungNodes = state.nodes.filter(n => Math.round(n.y) === y);
     rungNodes.sort((a, b) => a.x - b.x); // Left to right
 
+    // Enhanced Continuity Checker (Graph-based for branches)
+    const isNodeEnergized = (node: LadderNode, visited = new Set<string>()): boolean => {
+      if (visited.has(node.id)) return false;
+      visited.add(node.id);
+
+      // If it's the leftmost node and near the left rail, it's connected
+      if (node.x <= LEFT_RAIL_X + GRID_SIZE) return true;
+
+      // Check series continuity from rail (legacy compatibility)
+      const seriesToLeft = rungNodes.filter(n => n.type.startsWith('contact') && n.x < node.x && n.x >= LEFT_RAIL_X);
+      const isSeriesEnergized = seriesToLeft.every(contact => {
+        const addrVal = Boolean(values[contact.address]);
+        return contact.type === 'contact-no' ? addrVal : !addrVal;
+      });
+      if (isSeriesEnergized && seriesToLeft.length > 0) return true;
+
+      // Check Wires (The real expansion)
+      const incomingWires = state.wires.filter(w => w.toId === node.id);
+      for (const wire of incomingWires) {
+        const sourceNode = state.nodes.find(n => n.id === wire.fromId);
+        if (sourceNode) {
+          // A wire transmits energy if the source node is "conducting"
+          const sourceEnergized = isNodeEnergized(sourceNode, visited);
+          if (!sourceEnergized) continue;
+
+          // For contacts, they also need to be closed
+          if (sourceNode.type.startsWith('contact')) {
+             const addrVal = Boolean(values[sourceNode.address]);
+             const isOpen = sourceNode.type === 'contact-no' ? !addrVal : addrVal;
+             if (!isOpen) return true;
+          } else {
+             // Junctions or other blocks just pass energy
+             return true;
+          }
+        }
+      }
+
+      return false;
+    };
+
     const outputs = rungNodes.filter(n => 
       n.type === 'coil' || 
       n.type === 'coil-latch' ||
@@ -32,17 +72,6 @@ export function solveCircuit(state: LadderState): Record<string, boolean | numbe
       n.type.startsWith('compare') ||
       n.type.startsWith('math')
     );
-    
-    // Simple series continuity helper
-    const checkPathTo = (targetX: number) => {
-      const seriesToLeft = rungNodes.filter(n => n.type.startsWith('contact') && n.x < targetX);
-      if (seriesToLeft.length === 0) return true; // Direct connection if nothing is in series
-      
-      return seriesToLeft.every(contact => {
-        const addrVal = Boolean(values[contact.address]);
-        return contact.type === 'contact-no' ? addrVal : !addrVal;
-      });
-    };
 
     const getValue = (valOrAddr: string | number | undefined): number => {
       if (valOrAddr === undefined) return 0;
@@ -52,7 +81,7 @@ export function solveCircuit(state: LadderState): Record<string, boolean | numbe
     };
 
     for (const output of outputs) {
-      const isPathEnergized = checkPathTo(output.x);
+      const isPathEnergized = isNodeEnergized(output);
       
       // Update Output based on path
       if (output.type === 'coil') {

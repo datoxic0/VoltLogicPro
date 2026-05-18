@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Play, 
@@ -109,14 +109,107 @@ export default function App() {
       return INITIAL_STATE;
     }
   });
+
+  const [history, setHistory] = useState<LadderState[]>([]);
+  const [future, setFuture] = useState<LadderState[]>([]);
+
+  const pushToHistory = useCallback((nextState: LadderState) => {
+    setHistory(prev => [...prev.slice(-49), state]);
+    setFuture([]);
+    setState(nextState);
+  }, [state]);
+
+  const undo = useCallback(() => {
+    if (history.length === 0) return;
+    const prev = history[history.length - 1];
+    setFuture(f => [state, ...f]);
+    setHistory(h => h.slice(0, -1));
+    setState(prev);
+    addNotification("Undo successful", "info");
+  }, [history, state]);
+
+  const redo = useCallback(() => {
+    if (future.length === 0) return;
+    const next = future[0];
+    setHistory(h => [...h, state]);
+    setFuture(f => f.slice(1));
+    setState(next);
+    addNotification("Redo successful", "info");
+  }, [future, state]);
   
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [placementType, setPlacementType] = useState<NodeType | null>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  const jumpToNode = (nodeId: string) => {
+    const node = state.nodes.find(n => n.id === nodeId);
+    if (node) {
+      const containerWidth = window.innerWidth - (isSidebarOpen ? sidebarWidth : 80) - (selectedId ? inspectorWidth : 0);
+      const containerHeight = window.innerHeight - 64 - (isConsoleOpen ? consoleHeight : 0);
+      
+      setViewport({
+        x: -node.x * viewport.zoom + containerWidth / 2,
+        y: -node.y * viewport.zoom + containerHeight / 2,
+        zoom: viewport.zoom
+      });
+      setSelectedId(nodeId);
+      setIsSearchOpen(false);
+      addNotification(`Jumped to ${node.address || nodeId}`, "info");
+    }
+  };
+
+  const handleExport = () => {
+    const data = JSON.stringify(state, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ladder_project_${new Date().toISOString().split('T')[0]}.vlp`;
+    a.click();
+    URL.revokeObjectURL(url);
+    addNotification("Project exported successfully", "success");
+    setActiveMenu(null);
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const parsed = JSON.parse(content);
+        if (parsed.nodes && parsed.wires) {
+          pushToHistory(parsed);
+          addNotification("Project imported successfully", "success");
+        } else {
+          throw new Error("Invalid format");
+        }
+      } catch (err) {
+        addNotification("Import failed: File data corrupted or invalid", "error");
+      }
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setActiveMenu(null);
+  };
+
+  const filteredNodes = useMemo(() => {
+    if (!searchQuery) return [];
+    const q = searchQuery.toLowerCase();
+    return state.nodes.filter(n => 
+      n.address.toLowerCase().includes(q) || 
+      n.tag.toLowerCase().includes(q) || 
+      n.type.toLowerCase().includes(q)
+    );
+  }, [state.nodes, searchQuery]);
+
+  const [placementType, setPlacementType] = useState<NodeType | 'wire' | null>(null);
   const [viewport, setViewport] = useState({ x: 50, y: 50, zoom: 0.9 });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [consoleTab, setConsoleTab] = useState<'watch' | 'cross' | 'forces' | 'trends' | 'logs'>('watch');
-  const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isPropertyOpen, setIsPropertyOpen] = useState(true);
@@ -148,7 +241,7 @@ export default function App() {
         setSidebarWidth(newWidth);
       }
     } else if (resizingPanel.current === 'console') {
-      const newHeight = window.innerHeight - e.clientY - 32; // adjusted for footer
+      const newHeight = window.innerHeight - e.clientY - 32;
       if (newHeight > 100 && newHeight < 600) {
         setConsoleHeight(newHeight);
       }
@@ -163,37 +256,12 @@ export default function App() {
       window.removeEventListener('mouseup', stopResizing);
     };
   }, [resize, stopResizing]);
+
   const [currentView, setCurrentView] = useState<'routine' | 'tags' | 'blocks'>('routine');
   const [showIOSim, setShowIOSim] = useState(false);
   const [isCommunicating, setIsCommunicating] = useState<string | null>(null);
   const [showWhoActive, setShowWhoActive] = useState(false);
   const [notifications, setNotifications] = useState<{ id: string; text: string; type: 'info' | 'error' | 'success' }[]>([]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-      if (e.key === 'F2') {
-        e.preventDefault();
-        setIsSidebarOpen(prev => !prev);
-      } else if (e.key === 'F4') {
-        e.preventDefault();
-        setIsPropertyOpen(prev => !prev);
-      } else if (e.key === 'F6') {
-        e.preventDefault();
-        setIsConsoleOpen(prev => !prev);
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedId) {
-          deleteNode(selectedId);
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedId]);
-
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const addLog = (message: string, type: 'info' | 'warning' | 'error' = 'info') => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -209,14 +277,51 @@ export default function App() {
   const addNotification = (text: string, type: 'info' | 'error' | 'success' = 'info') => {
     const id = Math.random().toString(36).substr(2, 9);
     setNotifications(prev => [...prev, { id, text, type }]);
-    
-    // Also log it
-    addLog(text, type === 'error' ? 'error' : (type === 'success' ? 'info' : 'info'));
-    
+    addLog(text, type === 'error' ? 'error' : 'info');
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
     }, 4000); 
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.key === 'F2') {
+        e.preventDefault();
+        setIsSidebarOpen(prev => !prev);
+      } else if (e.key === 'F4') {
+        e.preventDefault();
+        setIsPropertyOpen(prev => !prev);
+      } else if (e.key === 'F6') {
+        e.preventDefault();
+        setIsConsoleOpen(prev => !prev);
+      } else if (e.key === 'k' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        setIsSearchOpen(true);
+      } else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        undo();
+      } else if (e.key === 'y' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        redo();
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedId) {
+          deleteNode(selectedId);
+        }
+      } else if (e.key === 'Escape') {
+        setPlacementType(null);
+        setActiveMenu(null);
+        if (isModalOpen) setIsModalOpen(false);
+        if (isSearchOpen) setIsSearchOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedId, undo, redo, isModalOpen, isSearchOpen]);
+
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -248,48 +353,10 @@ export default function App() {
     setActiveMenu(null);
   };
 
-  const handleExport = () => {
-    const data = JSON.stringify(state, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `controller_logic_${new Date().toISOString().split('T')[0]}.vlp`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setActiveMenu(null);
-  };
-
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const importedState = JSON.parse(event.target?.result as string);
-        if (importedState.nodes) {
-          setState(importedState);
-          setPlacementType(null);
-          setSelectedId(null);
-        }
-      } catch (err) {
-        console.error("Failed to import project:", err);
-        alert("Invalid project file format.");
-      }
-    };
-    reader.readAsText(file);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    setActiveMenu(null);
-  };
-
   const disableAllForces = () => {
     setState(prev => ({
       ...prev,
-      simulation: {
-        ...prev.simulation,
-        forcesEnabled: false
-      }
+      simulation: { ...prev.simulation, forcesEnabled: false }
     }));
     addNotification("Forces Disabled Globally", "info");
     setActiveMenu(null);
@@ -298,10 +365,7 @@ export default function App() {
   const removeAllForces = () => {
     setState(prev => ({
       ...prev,
-      simulation: {
-        ...prev.simulation,
-        forces: {}
-      }
+      simulation: { ...prev.simulation, forces: {} }
     }));
     addNotification("All Forces Removed", "info");
     setActiveMenu(null);
@@ -310,76 +374,16 @@ export default function App() {
   const enableForces = () => {
     setState(prev => ({
       ...prev,
-      simulation: {
-        ...prev.simulation,
-        forcesEnabled: true
-      }
+      simulation: { ...prev.simulation, forcesEnabled: true }
     }));
     addNotification("Forces Enabled Globally", "success");
     setActiveMenu(null);
   };
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'F2') {
-        e.preventDefault();
-        setIsSidebarOpen(prev => !prev);
-      } else if (e.key === 'F4') {
-        e.preventDefault();
-        setIsPropertyOpen(prev => !prev);
-      } else if (e.key === 'F6') {
-        e.preventDefault();
-        setIsConsoleOpen(prev => !prev);
-      } else if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        // Focus search if added
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  // Persistence
+  // PERSISTENCE Save
   useEffect(() => {
     localStorage.setItem('voltlogic_circuit_v3', JSON.stringify(state));
   }, [state]);
-
-  // Keyboard shortcuts and Global clicks
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedId && !isModalOpen) {
-          const target = document.activeElement;
-          if (target?.tagName !== 'INPUT' && target?.tagName !== 'TEXTAREA') {
-            setSelectedId(null);
-            setState(prev => ({
-               ...prev,
-               nodes: prev.nodes.filter(n => n.id !== selectedId)
-            }));
-          }
-        }
-      }
-      if (e.key === 'Escape') {
-        setPlacementType(null);
-        setActiveMenu(null);
-        if (isModalOpen) setIsModalOpen(false);
-      }
-    };
-
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('header') && !target.closest('.menu-container')) {
-        setActiveMenu(null);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [selectedId, isModalOpen]);
 
   // Simulation loop
   useEffect(() => {
@@ -389,15 +393,11 @@ export default function App() {
       setState(prev => {
         const nextValues = solveCircuit(prev);
         const nextHistory = { ...prev.simulation.history };
-        
         let changed = JSON.stringify(nextValues) !== JSON.stringify(prev.simulation.values);
 
-        // Record history for visualization trends
         Object.entries(nextValues).forEach(([addr, val]) => {
           const numVal = typeof val === 'boolean' ? (val ? 1 : 0) : val as number;
           const h = nextHistory[addr] || [];
-          
-          // Always add sample for smooth scrolling
           nextHistory[addr] = [...h.slice(-49), numVal];
           changed = true;
         });
@@ -426,13 +426,17 @@ export default function App() {
     else if (type.startsWith('counter')) address = `C5:${state.nodes.length}`;
     else if (type.startsWith('compare') || type.startsWith('math')) address = `N7:${state.nodes.length}`;
 
+    const isJunction = type === 'wire-junction';
+    const nodeWidth = isJunction ? 16 : NODE_WIDTH;
+    const nodeHeight = isJunction ? 16 : NODE_HEIGHT;
+
     const newNode: LadderNode = {
       id: `node-${Date.now()}`,
       type,
-      x: Math.round(x / GRID_SIZE) * GRID_SIZE,
-      y: Math.round((y - RUNG_HEIGHT/2) / RUNG_HEIGHT) * RUNG_HEIGHT + (RUNG_HEIGHT/2 - NODE_HEIGHT/2),
-      width: NODE_WIDTH,
-      height: NODE_HEIGHT,
+      x: isJunction ? (Math.round(x / 8) * 8 - 8) : (Math.round(x / GRID_SIZE) * GRID_SIZE),
+      y: isJunction ? (Math.round(y / 8) * 8 - 8) : (Math.round((y - RUNG_HEIGHT/2) / RUNG_HEIGHT) * RUNG_HEIGHT + (RUNG_HEIGHT/2 - nodeHeight/2)),
+      width: nodeWidth,
+      height: nodeHeight,
       tag: `${type.toUpperCase().replace('-', '_')}_${state.nodes.length + 1}`,
       address,
       params: {
@@ -442,27 +446,52 @@ export default function App() {
         dest: type.startsWith('math') ? `N7:1` : undefined
       }
     };
-    setState(prev => ({
-      ...prev,
-      nodes: [...prev.nodes, newNode]
-    }));
+    pushToHistory({
+      ...state,
+      nodes: [...state.nodes, newNode]
+    });
     setSelectedId(newNode.id);
   };
 
-  const updateNode = (id: string, updates: Partial<LadderNode>) => {
-    setState(prev => ({
-      ...prev,
-      nodes: prev.nodes.map(n => n.id === id ? { ...n, ...updates } : n)
-    }));
-  };
+  const updateNode = useCallback((id: string, updates: Partial<LadderNode>) => {
+    pushToHistory({
+      ...state,
+      nodes: state.nodes.map(n => n.id === id ? { ...n, ...updates } : n)
+    });
+  }, [state, pushToHistory]);
 
-  const deleteNode = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      nodes: prev.nodes.filter(n => n.id !== id)
-    }));
-    if (selectedId === id) setSelectedId(null);
-  };
+  const deleteNode = useCallback((id: string) => {
+    pushToHistory({
+      ...state,
+      nodes: state.nodes.filter(n => n.id !== id),
+      wires: state.wires.filter(w => w.fromId !== id && w.toId !== id)
+    });
+    setSelectedId(null);
+  }, [state, pushToHistory]);
+
+  const addWire = useCallback((fromId: string, fromSide: 'left' | 'right', toId: string, toSide: 'left' | 'right') => {
+    const newWire = {
+      id: `wire-${Date.now()}`,
+      fromId,
+      fromSide,
+      toId,
+      toSide,
+      points: []
+    };
+    pushToHistory({
+      ...state,
+      wires: [...state.wires, newWire]
+    });
+    addNotification("Connection established", "success");
+  }, [state, pushToHistory]);
+
+  const deleteWire = useCallback((id: string) => {
+    pushToHistory({
+      ...state,
+      wires: state.wires.filter(w => w.id !== id)
+    });
+    addNotification("Connection removed", "info");
+  }, [state, pushToHistory]);
 
   const toggleSimulation = () => {
     setState(prev => ({
@@ -580,7 +609,27 @@ export default function App() {
   };
 
   const handleCanvasClick = (x: number, y: number) => {
-    if (placementType) {
+    if (placementType === 'wire') {
+      const id = `junction-${Date.now()}`;
+      const snappedX = Math.round(x / 8) * 8;
+      const snappedY = Math.round(y / 8) * 8;
+      
+      const newNode: LadderNode = {
+        id,
+        type: 'wire-junction',
+        x: snappedX - 8,
+        y: snappedY - 8,
+        width: 16,
+        height: 16,
+        tag: '',
+        address: '',
+      };
+      
+      pushToHistory({
+        ...state,
+        nodes: [...state.nodes, newNode]
+      });
+    } else if (placementType) {
       addNode(placementType, x, y);
       setPlacementType(null); 
     } else {
@@ -677,8 +726,8 @@ export default function App() {
                      )}
                      {menu === 'Edit' && (
                        <>
-                         <button onClick={() => setActiveMenu(null)} className="w-full text-left px-4 py-2 hover:bg-blue-600 hover:text-white flex justify-between items-center text-[12px] font-medium transition-colors">Undo <span className="opacity-40 text-[10px]">⌘Z</span></button>
-                         <button onClick={() => setActiveMenu(null)} className="w-full text-left px-4 py-2 hover:bg-blue-600 hover:text-white flex justify-between items-center text-[12px] font-medium transition-colors">Redo <span className="opacity-40 text-[10px]">⌘Y</span></button>
+                         <button onClick={() => { undo(); setActiveMenu(null); }} disabled={history.length === 0} className={cn("w-full text-left px-4 py-2 hover:bg-blue-600 hover:text-white flex justify-between items-center text-[12px] font-medium transition-colors", history.length === 0 && "opacity-30 pointer-events-none")}>Undo <span className="opacity-40 text-[10px]">⌘Z</span></button>
+                         <button onClick={() => { redo(); setActiveMenu(null); }} disabled={future.length === 0} className={cn("w-full text-left px-4 py-2 hover:bg-blue-600 hover:text-white flex justify-between items-center text-[12px] font-medium transition-colors", future.length === 0 && "opacity-30 pointer-events-none")}>Redo <span className="opacity-40 text-[10px]">⌘Y</span></button>
                          <hr className="my-1 border-black/5" />
                          <button onClick={() => setActiveMenu(null)} className="w-full text-left px-4 py-2 hover:bg-blue-600 hover:text-white flex justify-between items-center text-[12px] font-medium transition-colors">Cut <span className="opacity-40 text-[10px]">⌘X</span></button>
                          <button onClick={() => setActiveMenu(null)} className="w-full text-left px-4 py-2 hover:bg-blue-600 hover:text-white flex justify-between items-center text-[12px] font-medium transition-colors">Copy <span className="opacity-40 text-[10px]">⌘C</span></button>
@@ -837,6 +886,8 @@ export default function App() {
                         onCanvasClick={handleCanvasClick}
                         onNodeDoubleClick={handleNodeDoubleClick}
                         onRungAction={handleRungAction}
+                        onAddWire={addWire}
+                        onDeleteWire={deleteWire}
                       />
                       
                        {/* Diagnostic Overlay */}
@@ -1145,7 +1196,9 @@ export default function App() {
                     onUpdate={updateNode}
                     onDelete={deleteNode}
                     onForceIO={handleForceIO}
+                    onJumpToNode={jumpToNode}
                     forces={state.simulation.forces || {}}
+                    nodes={state.nodes}
                   />
                </motion.div>
             </div>
@@ -1189,7 +1242,9 @@ export default function App() {
                     onUpdate={updateNode}
                     onDelete={(id) => { deleteNode(id); setIsModalOpen(false); }}
                     onForceIO={handleForceIO}
+                    onJumpToNode={jumpToNode}
                     forces={state.simulation.forces || {}}
+                    nodes={state.nodes}
                     isEmbedded
                   />
                   <div className="mt-8 flex justify-end">
@@ -1314,6 +1369,83 @@ export default function App() {
           ))}
         </AnimatePresence>
       </div>
+
+      {/* SEARCH COMMAND PALETTE */}
+      <AnimatePresence>
+        {isSearchOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-start justify-center pt-[15vh] p-4"
+            onClick={() => setIsSearchOpen(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: -20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: -20 }}
+              className="w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="p-4 border-b border-zinc-800 flex items-center gap-3">
+                <Search size={18} className="text-zinc-500" />
+                <input 
+                  autoFocus
+                  type="text"
+                  placeholder="Search tags, addresses, or instructions... (Esc to close)"
+                  className="bg-transparent border-none outline-none text-zinc-100 flex-1 text-sm font-medium"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') setIsSearchOpen(false);
+                    if (e.key === 'Enter' && filteredNodes.length > 0) jumpToNode(filteredNodes[0].id);
+                  }}
+                />
+              </div>
+              <div className="max-h-[60vh] overflow-y-auto p-2 custom-scrollbar">
+                {filteredNodes.map(node => (
+                  <button
+                    key={node.id}
+                    onClick={() => jumpToNode(node.id)}
+                    className="w-full flex items-center justify-between p-3 hover:bg-white/5 rounded-xl transition-colors group text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-[10px] font-black text-blue-400 uppercase">
+                        {node.type.slice(0, 3)}
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-zinc-200">{node.address}</div>
+                        <div className="text-[10px] text-zinc-500 font-mono italic">{node.tag || 'No tag assigned'}</div>
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-zinc-600 font-black uppercase tracking-widest group-hover:text-blue-400">
+                      Rung {Math.floor(node.y / 150)}
+                    </div>
+                  </button>
+                ))}
+                {searchQuery && filteredNodes.length === 0 && (
+                  <div className="p-8 text-center text-zinc-600 text-sm">
+                    No results found for "{searchQuery}"
+                  </div>
+                )}
+                {!searchQuery && (
+                   <div className="p-8 text-center text-zinc-600">
+                      <div className="text-[10px] font-black uppercase tracking-[0.2em] mb-2">Search Logic Kernel</div>
+                      <div className="text-[9px] opacity-40">Search for physical I/O map or symbolic primitives</div>
+                   </div>
+                )}
+              </div>
+              <div className="p-3 bg-black/40 border-t border-zinc-800 flex items-center justify-between text-[9px] text-zinc-500 font-black uppercase tracking-widest px-6">
+                <div className="flex gap-4">
+                  <span><span className="text-zinc-700">↵</span> Select</span>
+                  <span><span className="text-zinc-700">↑↓</span> Navigate</span>
+                </div>
+                <span>Cmd+K</span>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" accept=".vlp" />
     </div>

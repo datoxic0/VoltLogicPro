@@ -13,24 +13,28 @@ import {
   Activity,
   Box,
   Settings,
+  Minus,
   ChevronDown
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { NodeType } from '../types';
 
 interface SidebarProps {
-  onAddNode: (type: NodeType) => void;
-  placementType: NodeType | null;
+  onAddNode: (type: NodeType | 'wire') => void;
+  placementType: NodeType | 'wire' | null;
   currentView: 'routine' | 'tags' | 'blocks';
   onViewChange: (view: 'routine' | 'tags' | 'blocks') => void;
 }
 
-const COMPONENTS: { type: NodeType; label: string; icon: any; category: string }[] = [
+const COMPONENTS: { type: NodeType | 'wire'; label: string; icon: any; category: string }[] = [
   { type: 'contact-no', label: 'Examine if Closed', icon: Square, category: 'Bit' },
   { type: 'contact-nc', label: 'Examine if Open', icon: HandMetal, category: 'Bit' },
   { type: 'coil', label: 'Output Energize', icon: CircleDot, category: 'Bit' },
+  { type: 'wire' as any, label: 'Manual Connection', icon: Activity, category: 'Bit' },
+  { type: 'branch-start', label: 'Branch Start', icon: ChevronRight, category: 'Bit' },
+  { type: 'wire-vertical', label: 'Vertical Wire', icon: Minus, category: 'Bit' },
+  { type: 'wire-junction', label: 'Wiring Junction', icon: CircleDot, category: 'Bit' },
   { type: 'timer-on', label: 'Timer On Delay', icon: Timer, category: 'Timer/Counter' },
-  { type: 'counter-up', label: 'Count Up', icon: Hash, category: 'Timer/Counter' },
 ];
 
 export function Sidebar({ onAddNode, placementType, currentView, onViewChange }: SidebarProps) {
@@ -178,7 +182,10 @@ export function Sidebar({ onAddNode, placementType, currentView, onViewChange }:
                   {comp.type === 'contact-no' ? 'XIC' : 
                    comp.type === 'contact-nc' ? 'XIO' : 
                    comp.type === 'coil' ? 'OTE' : 
-                   comp.type === 'timer-on' ? 'TON' : 'CTU'}
+                   comp.type === 'wire' ? 'WIRE' :
+                   comp.type === 'branch-start' ? 'BST' :
+                   comp.type === 'wire-vertical' ? 'VERT' :
+                   comp.type === 'wire-junction' ? 'JUNC' : 'TON'}
                 </span>
               </button>
             ))}

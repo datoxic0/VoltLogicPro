@@ -35,11 +35,13 @@ interface PropertyInspectorProps {
   onUpdate: (id: string, updates: Partial<LadderNode>) => void;
   onDelete: (id: string) => void;
   onForceIO: (address: string, value?: boolean) => void;
+  onJumpToNode?: (id: string) => void;
   forces: Record<string, boolean | number>;
+  nodes?: LadderNode[]; // Added for cross-reference
   isEmbedded?: boolean;
 }
 
-export function PropertyInspector({ selectedNode, values, history, onUpdate, onDelete, onForceIO, forces, isEmbedded }: PropertyInspectorProps) {
+export function PropertyInspector({ selectedNode, values, history, onUpdate, onDelete, onForceIO, onJumpToNode, forces, nodes = [], isEmbedded }: PropertyInspectorProps) {
   if (!selectedNode) {
     if (isEmbedded) return null;
     return (
@@ -171,6 +173,52 @@ export function PropertyInspector({ selectedNode, values, history, onUpdate, onD
                   <span className="text-[9px] font-black uppercase tracking-tighter">Pulse Test</span>
                 </button>
              </div>
+
+             {/* Status Bits Display */}
+             <div className="pt-4 border-t border-zinc-800 grid grid-cols-3 gap-2">
+                {selectedNode.type.startsWith('timer') ? (
+                  <>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className={cn("w-full h-1 rounded-full", values[`${selectedNode.address}_EN`] ? "bg-green-500 shadow-[0_0_8px_#22c55e]" : "bg-zinc-800")} />
+                      <span className="text-[7px] font-black text-zinc-600">EN</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className={cn("w-full h-1 rounded-full", values[`${selectedNode.address}_TT`] ? "bg-blue-500 shadow-[0_0_8px_#3b82f6]" : "bg-zinc-800")} />
+                      <span className="text-[7px] font-black text-zinc-600">TT</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className={cn("w-full h-1 rounded-full", values[`${selectedNode.address}_DN`] ? "bg-emerald-500 shadow-[0_0_8px_#10b981]" : "bg-zinc-800")} />
+                      <span className="text-[7px] font-black text-zinc-600">DN</span>
+                    </div>
+                  </>
+                ) : selectedNode.type.startsWith('counter') ? (
+                  <>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className={cn("w-full h-1 rounded-full", values[`${selectedNode.address}_CU`] ? "bg-green-500 shadow-[0_0_8px_#22c55e]" : "bg-zinc-800")} />
+                      <span className="text-[7px] font-black text-zinc-600">CU</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className={cn("w-full h-1 rounded-full", values[`${selectedNode.address}_CD`] ? "bg-blue-500 shadow-[0_0_8px_#3b82f6]" : "bg-zinc-800")} />
+                      <span className="text-[7px] font-black text-zinc-600">CD</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className={cn("w-full h-1 rounded-full", values[`${selectedNode.address}_DN`] ? "bg-emerald-500 shadow-[0_0_8px_#10b981]" : "bg-zinc-800")} />
+                      <span className="text-[7px] font-black text-zinc-600">DN</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className={cn("w-full h-1 rounded-full", values[selectedNode.address] ? "bg-green-500 shadow-[0_0_8px_#22c55e]" : "bg-zinc-800")} />
+                      <span className="text-[7px] font-black text-zinc-600">STATE</span>
+                    </div>
+                    <div className="flex flex-col col-span-2 items-center gap-1">
+                      <div className={cn("w-full h-1 rounded-full", forces[selectedNode.address] !== undefined ? "bg-amber-500" : "bg-zinc-800")} />
+                      <span className="text-[7px] font-black text-zinc-600 uppercase">Input-Mapped Persistence</span>
+                    </div>
+                  </>
+                )}
+             </div>
           </section>
 
           {/* Configuration Parameters */}
@@ -263,6 +311,31 @@ export function PropertyInspector({ selectedNode, values, history, onUpdate, onD
                className="w-full bg-zinc-900/50 border border-zinc-800/80 rounded-xl p-4 text-[11px] text-zinc-400 focus:border-zinc-700 outline-none min-h-[100px] resize-none border-dashed transition-all"
                placeholder="Enter functional description or maintenance notes for this instruction..."
              />
+          </section>
+
+          {/* Cross References Section */}
+          <section className="space-y-3 pb-8">
+             <div className="flex items-center gap-2 mb-2">
+                <Database size={10} className="text-zinc-500" />
+                <span className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em]">Cross Reference</span>
+             </div>
+             <div className="space-y-1">
+                {nodes.filter(n => n.address === selectedNode.address && n.id !== selectedNode.id).map(n => (
+                  <div 
+                    key={n.id} 
+                    onClick={() => onJumpToNode?.(n.id)}
+                    className="flex items-center justify-between p-2 bg-white/5 border border-zinc-800 rounded-lg text-[9px] hover:border-blue-500 transition-all cursor-pointer group/xref"
+                  >
+                    <span className="text-blue-400 font-bold uppercase group-hover/xref:text-white">{n.type}</span>
+                    <span className="text-zinc-600 group-hover/xref:text-zinc-400">Rung {Math.floor(n.y / 150)}</span>
+                  </div>
+                ))}
+                {nodes.filter(n => n.address === selectedNode.address && n.id !== selectedNode.id).length === 0 && (
+                  <div className="text-center py-4 bg-zinc-900/30 rounded-xl text-zinc-700 italic text-[9px]">
+                    No other occurrences of this address
+                  </div>
+                )}
+             </div>
           </section>
         </div>
 

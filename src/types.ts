@@ -24,7 +24,11 @@ export type NodeType =
   | 'math-sub'
   | 'math-mul'
   | 'math-div'
-  | 'math-mov';
+  | 'math-mov'
+  | 'branch-start'
+  | 'branch-end'
+  | 'wire-vertical'
+  | 'wire-junction';
 
 export interface LadderNode {
   id: string;
@@ -72,5 +76,5 @@ export const GRID_SIZE = 32;
 export const RUNG_HEIGHT = 128; 
 export const NODE_WIDTH = 96;
 export const NODE_HEIGHT = 48;
-export const LEFT_RAIL_X = 80;
+export const LEFT_RAIL_X = 64; 
 export const RIGHT_RAIL_X = 1120;
